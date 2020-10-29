@@ -1,0 +1,33 @@
+{ 
+  "token"  : "",
+  "guildid" : 99171705951363072,
+  "channels" : {
+    "botspamchannelid" : 619578852376838194,
+    "generalcategoryid": 361137431061200896,
+    "stratchannelid": 471144350357913600
+  },
+  "sheet" : {
+    "sheetid" : "",
+    "rangename" : "",
+    "columns" : {
+      "main" : 0,
+      "character" : 1,
+      "player" : 2,
+      "discordid" : 3,
+      "attendance" : 4,
+      "altjobs" : 5,
+      "notes" : 6,
+      "readstrat" : 7
+    }
+  },
+  "prefix" : "!",
+  "roles" : {
+    "adminid" : 99180453910564864,
+    "botid": 127853311406637056
+  },
+  "shard" : {
+    "shardid": 125034471169851404,
+    "sharddebt": 74
+  },
+  "maxgryphonpic": 7
+}
