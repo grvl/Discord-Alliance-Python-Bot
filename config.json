@@ -4,11 +4,12 @@
   "channels" : {
     "botspamchannelid" : 619578852376838194,
     "generalcategoryid": 361137431061200896,
-    "stratchannelid": 471144350357913600
+    "stratchannelid": 471144350357913600,
+    "discussionchannelid":659540179383615499
   },
   "sheet" : {
     "sheetid" : "",
-    "rangename" : "",
+    "rangename" : "New Roster!A2:H100",
     "columns" : {
       "main" : 0,
       "character" : 1,
@@ -28,6 +29,9 @@
   "shard" : {
     "shardid": 125034471169851404,
     "sharddebt": 74
+  },
+  "shall" : {
+    "shallid": 105788620748636160
   },
   "maxgryphonpic": 7
 }

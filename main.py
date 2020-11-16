@@ -9,6 +9,9 @@ from google.oauth2 import service_account
 import random
 import re
 from pathlib import Path
+import sys
+import requests
+from bs4 import BeautifulSoup
 
 # -----------------------------------------
 # Load bot
@@ -54,7 +57,6 @@ async def get_table():
     values = result.get('values', [])
 
     if not values:
-        await ctx.send('Failed to load sheet.')
         log('No data found in the sheet.')
     else:
         # Resize rows to not bug on if checks
@@ -112,8 +114,15 @@ def caller_in_guild(ctx:commands.Context):
 def caller_in_bot_spam_channel(ctx:commands.Context):
     return ctx.message.channel.id == bot_data['channels']['botspamchannelid']
 
+
+def caller_in_discussion_channel(ctx:commands.Context):
+    return ctx.message.channel.id == bot_data['channels']['discussionchannelid']
+
 def caller_in_general_channels_category(message:discord.Message):
     return message.channel.category_id == bot_data['channels']['generalcategoryid']
+
+def caller_is_bodi(ctx: commands.Context):
+    return ctx.message.author.id == bot_data['shall']['shallid']
 
 # For checks you don't want an exception thrown for, and want to just silently return
 def invalid_call_without_error_message(ctx:commands.Context):
@@ -180,7 +189,7 @@ async def on_command_error(ctx:commands.Context, error):
         await ctx.send('You do not have the correct role for this command.')
     
     elif isinstance(error, commands.CommandOnCooldown):
-        await ctx.send('This command is on cooldown, please retry in {}s.'.format(math.ceil(error.retry_after)))
+        await ctx.send('This command is on cooldown, please retry in {}s.'.format(error.retry_after))
     
     elif isinstance(error, commands.MissingPermissions):
         await ctx.send('You don\'t have the required permissions for this command.')
@@ -405,19 +414,28 @@ async def von(ctx:commands.Context):
             picture = discord.File(file)
         await ctx.send(file=picture)
 
-@bot.command(name='sig', help= 'Generate a NovaRO sig for your character. Usage: ' + bot_data['prefix'] + 'sig <character_name> <bg id (optional)> <pose id (optional)>')
+@bot.command(name='sig', help= 'Generate a NovaRO sig for your character. Usage: ' + bot_data['prefix'] + 'sig <character_name>')
 @commands.guild_only()
-async def sig(ctx:commands.Context, character_name:str, bg = 0, pose = 0):
+async def sig(ctx:commands.Context, *character_name:str):
     if invalid_call_without_error_message(ctx):
         return
 
     await generic_functions_to_run_on_all_commands(ctx)
 
-    if bg == 0:
-        bg = random.randint(1, 11)
-        pose = random.randint(1, 13)
+    bg = random.randint(1, 11)
+    pose = random.randint(1, 13)
 
-    await ctx.send('https://www.novaragnarok.com/ROChargenPHP/newsig/' + character_name+ '/' + str(bg) + '/' + str(pose))
+    await ctx.send('https://www.novaragnarok.com/ROChargenPHP/newsig/' + ' '.join(character_name).replace(' ', '%20')+ '/' + str(bg) + '/' + str(pose))
+
+@bot.command(name='sig2', help= 'Generate a NovaRO sig for your character. Usage: ' + bot_data['prefix'] + 'sig "<character_name>" <bg id> <pose id>')
+@commands.guild_only()
+async def sig2(ctx:commands.Context, character_name:str, bg, pose):
+    if invalid_call_without_error_message(ctx):
+        return
+
+    await generic_functions_to_run_on_all_commands(ctx)
+
+    await ctx.send('https://www.novaragnarok.com/ROChargenPHP/newsig/' + character_name.replace(' ', '%20')+ '/' + str(bg) + '/' + str(pose))
 
 @bot.command(name='setatt', help= 'Set WoE attendance. Can only be used on the #bot_spam channel. Usage: ' + bot_data['prefix'] + 'setatt <Yes/No>')
 @commands.guild_only()
@@ -482,7 +500,146 @@ async def setnote(ctx:commands.Context, *notes:str):
     await generic_functions_to_run_on_all_commands(ctx)
 
     await update_table(ctx, bot_data['sheet']['columns']['notes'], ' '.join(notes))
+    
+@bot.command(name='gvganalysis', help= 'Analyze the kills and deaths during WoE: ' + bot_data['prefix'] + 'gvganalysis <starttime> <endtime>')
+@commands.guild_only()
+async def gvganalysis(ctx:commands.Context, start:str, end:str):
+    url_nova = "http://www.novaragnarok.com"
+    url_woe = url_nova + "/?module=woe_stats"
+    alliance = '3968'
+    kills = dict()
+    deaths = dict()
+    start_time = start.split(':')
+    end_time = end.split(':')
+    
+    await generic_functions_to_run_on_all_commands(ctx)
+    
+    if not caller_in_discussion_channel(ctx) and not caller_is_bodi(ctx):
+        await ctx.send('You can only use this command on the discussion channel.')
+        return
 
+    try:
+        start_minute = int(start_time[0])
+        start_second = int(start_time[1])
+        end_minute = int(end_time[0])
+        end_second = int(end_time[1])
+        
+        if end_minute - start_minute > 3:
+           await ctx.send('You can only analyze a maximum of 3 minutes.') 
+           return
+       
+        if end_minute < start_minute or (end_minute == start_minute and start_minute > end_minute):
+           await ctx.send('Invalid timestamps.')
+           return
+        
+    except:
+        await ctx.send('Invalid timestamps.')
+        return
+        
+    try:
+        message = await ctx.send('Please wait while I load the website. This process should take around 30s.') 
+        # get the HTML from the page as pure text.
+        woe = requests.get(url_woe)
+        # Transforms the pure html text into a html object that can be filtered and searched properly.
+        woe_html = BeautifulSoup(woe.text, "html.parser")
+        # grab only the table I want from the whole page. The table is the list with all characters who played WoE. The list already includes all players, even if visually you can only see the 20 players per page in the website.
+        woe_stats = woe_html.find(id="woe-stats")
+
+        if woe_stats is not None:
+            # for each row / player
+            for row in woe_stats.findAll("tr"):
+                cols = row.findAll("td")
+                
+                guild = cols[0].find('a').get('data-guild-id')
+                name = cols[1].find('a').string.strip()
+                url = cols[1].find('a')
+                url_player = url_nova + url.get('href')
+                
+
+                    
+                if guild == alliance:
+                    # Open the player's page
+                    user = requests.get(url_player)
+                    user_html = BeautifulSoup(user.text, "html.parser")
+                    # Get the rows in the player specific table
+                    kills_table = user_html.find(id = "table-kills")
+                    deaths_table = user_html.find(id = "table-deaths")
+                    
+                    
+                    if kills_table is not None:                          
+                        rows = kills_table.findAll("tr")
+                        
+                        for kill in rows:
+                            cols = kill.findAll("td")
+                            time = cols[5].string.strip().split(':')
+                            victim = cols[2].find('a').string.strip()
+                            skill = cols[4].string.strip()
+                            time_minute = int(time[0])
+                            time_second = int(time[1])           
+                            
+                            if time_minute > end_minute or (time_minute == end_minute and time_second > end_second):
+                                break
+                            
+                            if time_minute < start_minute or (time_minute == start_minute and time_second < start_second):
+                                continue
+                            
+                            if name not in kills:
+                                kills[name] = dict()
+                            
+                            if skill not in kills[name]:
+                                kills[name][skill] = []
+                                
+                            kills[name][skill].append(victim)
+                            
+                    if deaths_table is not None:                                             
+                        rows = deaths_table.findAll("tr")
+                        
+                        for death in rows:
+                            cols = death.findAll("td")
+                            time = cols[5].string.strip().split(':')
+                            killer = cols[2].find('a').string.strip()
+                            skill = cols[4].string.strip()
+                            time_minute = int(time[0])
+                            time_second = int(time[1])           
+                            
+                            if time_minute > end_minute or (time_minute == end_minute and time_second > end_second):
+                                break
+                            
+                            if time_minute < start_minute or (time_minute == start_minute and time_second < start_second):
+                                continue
+                            
+                            if killer not in deaths:
+                                deaths[killer] = dict()
+                            
+                            if skill not in deaths[killer]:
+                                deaths[killer][skill] = []
+                                
+                            deaths[killer][skill].append(name)                    
+        else:
+            await ctx.send('Failed to load player table.')       
+        
+        report = ""
+        
+        report = report  + "KILLS ```"
+        for killer in kills:
+            for skill in kills[killer]:
+                report = report  + killer + ' - ' + skill + ': ' + ', '.join(kills[killer][skill]) + '\n'
+        report = report + '```'     
+                
+        report = report  + "DEATHS ```"
+        for killer in deaths:
+            for skill in deaths[killer]:
+                report = report  + killer + ' - ' + skill + ': ' + ', '.join(deaths[killer][skill]) + '\n'
+        report = report + '```'
+                
+        await message.edit(content = report)
+                
+    except:
+        e = sys.exc_info()
+        await ctx.send(e)
+
+    
+ 
 # -----------------------------------------
 # Bot start
 try:
